@@ -4,6 +4,6 @@
   "keywords": [],
   "author": "Lyle Keeton",
   "license": "MIT",
-  "description": "Dependency free javascript and css concatenation and source map generation."
-
+  "description": "Dependency free javascript and css concatenation and source map generation.",
+  "scripts":{}
 }
