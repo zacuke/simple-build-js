@@ -1,32 +1,42 @@
 ﻿const fs = require('fs');
 const path = require('path');
- 
-// todo: make these parameters
-// Define the build output
-const jsOutputDir = 'wwwroot';
-const outputFile = 'site.min.js';
-const excludeDirs = ['node_modules', 'wwwroot'];
+
+// Parse command-line arguments
+const args = parseArgs(process.argv.slice(2));
+const outputDir = args.outputDir || 'wwwroot';
+const outputFile = args.outputFile || 'site.min.js';
+const excludeDirs = args.excludeDirs ? args.excludeDirs.split(',') : ['wwwroot'];
+const excludeFiles = args.excludeFiles ? args.excludeFiles.split(',') : [];
+if (!excludeDirs.includes('node_modules'))  
+    excludeDirs.push('node_modules');
+   
+if (!excludeDirs.includes('bin'))  
+    excludeDirs.push('bin');
+  
+if (!excludeDirs.includes('obj'))  
+    excludeDirs.push('obj');
+  
+const extension = args.extension || '.js';
 
 (async () => {
     try {
         // Ensure the output directories exist
-        if (!fs.existsSync(jsOutputDir)) {
-            fs.mkdirSync(jsOutputDir, { recursive: true });
+        if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
         }
         const projectRoot = process.cwd();
-        const outputFilePath = path.join(jsOutputDir, outputFile);
-        const currentScript = path.relative(projectRoot, process.argv[1]);
+        const outputFilePath = path.join(outputDir, outputFile); 
 
         // Concatenate JS files
-        await concatenateJSFiles(projectRoot, outputFilePath, excludeDirs, currentScript);
+        await concatenateJSFiles(projectRoot, outputFilePath, excludeDirs, excludeFiles);
     } catch (error) {
         console.error('Error during build:', error);
     }
 })();
 
-async function concatenateJSFiles(dir, outputFile, excludeDirs = [], excludeFile = '') {
+async function concatenateJSFiles(dir, outputFile, excludeDirs , excludeFiles) {
     try {
-        const jsFiles = await searchFiles(dir, excludeDirs, excludeFile);
+        const jsFiles = await searchFiles(dir, excludeDirs, excludeFiles, extension);
         let concatenatedContent = '';
         let generatedLine = 1;
         let generatedColumn = 0;
@@ -35,6 +45,8 @@ async function concatenateJSFiles(dir, outputFile, excludeDirs = [], excludeFile
         const generator = new SourceMapGenerator(outputFile);
 
         for (const file of jsFiles) {
+            console.log(`Reading ${file}`);
+
             const filePath = path.join(dir, file);
             const fileContent = await fs.promises.readFile(filePath, 'utf-8');
 
@@ -76,7 +88,7 @@ async function concatenateJSFiles(dir, outputFile, excludeDirs = [], excludeFile
 
 
 
-async function searchFiles(dir, excludeDirs = [], excludeFile = '', extension = '.js') {
+async function searchFiles(dir, excludeDirs, excludeFiles, extension) {
     const results = [];
 
     const traverse = async (currentDir) => {
@@ -85,10 +97,12 @@ async function searchFiles(dir, excludeDirs = [], excludeFile = '', extension = 
             const filePath = path.join(currentDir, file.name);
             const relativePath = path.relative(dir, filePath);
 
-            if (excludeDirs.some(excludeDir => relativePath.startsWith(excludeDir)) || relativePath === excludeFile) {
-                continue; // Skip excluded directories and the current script
-            }
+            if (excludeDirs.some(excludeDir => relativePath.startsWith(excludeDir)))
+                continue;
 
+            if( excludeFiles.some(excludeFile => matchRuleShort(file.name, excludeFile)))
+                continue;    
+ 
             if (file.isDirectory()) {
                 await traverse(filePath);
             } else if (file.isFile() && file.name.endsWith(extension)) {
@@ -248,9 +262,31 @@ class SourceMapGenerator {
         // Add sourceMappingURL to the generated file
         const sourceMapUrl = path.basename(outputPath);
         const generatedContent = fs.readFileSync(this.generatedFilePath, 'utf8');
-        const updatedContent = generatedContent + `\n//# sourceMappingURL=${sourceMapUrl}\n`;
+        let updatedContent=''
+        if (sourceMapUrl.includes('css.map')){
+            updatedContent = generatedContent + `\n/*# sourceMappingURL=${sourceMapUrl}*/\n`;
+        }else{
+            updatedContent = generatedContent + `\n//# sourceMappingURL=${sourceMapUrl}\n`;
+        }
+         
         fs.writeFileSync(this.generatedFilePath, updatedContent);
     }
 }
 
-module.exports = SourceMapGenerator;
+function parseArgs(args) {
+    const params = {};
+    args.forEach(arg => {
+        const [key, value] = arg.split('=');
+        if (key && value) {
+            params[key] = value;
+        }
+    });
+    return params;
+}
+
+//https://stackoverflow.com/questions/26246601/wildcard-string-comparison-in-javascript
+function matchRuleShort(str, rule) {
+    var escapeRegex = (str) => str.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1");
+    return new RegExp("^" + rule.split("*").map(escapeRegex).join(".*") + "$").test(str);
+  }
+ 

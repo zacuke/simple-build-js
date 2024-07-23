@@ -4,6 +4,6 @@
   "keywords": [],
   "author": "Lyle Keeton",
   "license": "MIT",
-  "description": "A simple tool to handle JS file concatenation and source map generation for ASP.NET projects without heavy dependencies."
+  "description": "Dependency free javascript and css concatenation and source map generation."
 
 }
