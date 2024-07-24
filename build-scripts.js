@@ -48,7 +48,7 @@ async function concatenateJSFiles(dir, outputFile, excludeDirs , excludeFiles) {
             console.log(`Reading ${file}`);
 
             const filePath = path.join(dir, file);
-            const fileContent = await fs.promises.readFile(filePath, 'utf-8');
+            const fileContent =  removeBOM(await fs.promises.readFile(filePath, 'utf-8'));
 
             // Add detailed mappings for the file
             const { lastGeneratedLine, lastGeneratedColumn } = generator.addMappingsForFile(
@@ -156,20 +156,47 @@ class SourceMapGenerator {
         });
     }
     addMappingsForFile(fileContent, filePath, generatedLine, generatedColumn) {
-        const lines = fileContent.split('\n');
+        const lines = removeBOM(fileContent).split('\n');
+        let currentGeneratedLine = generatedLine;
+        let currentGeneratedColumn = generatedColumn;
+
         lines.forEach((line, lineIndex) => {
+            let currentOriginalColumn = 0;
+
+            // Process each character in the line
+            for (let i = 0; i < line.length; i++) {
+                this.addMapping(
+                    currentGeneratedLine,
+                    currentGeneratedColumn,
+                    filePath,
+                    lineIndex + 1,
+                    currentOriginalColumn
+                );
+
+                currentGeneratedColumn++;
+                currentOriginalColumn++;
+            }
+
+            // Add mapping for newline character
             this.addMapping(
-                generatedLine,
-                0,
+                currentGeneratedLine,
+                currentGeneratedColumn,
                 filePath,
                 lineIndex + 1,
-                0
+                currentOriginalColumn
             );
-            generatedLine++;
+
+            currentGeneratedLine++;
+            currentGeneratedColumn = 0;
         });
-        return { lastGeneratedLine: generatedLine, lastGeneratedColumn: 0 };
+
+        return { 
+            lastGeneratedLine: currentGeneratedLine, 
+            lastGeneratedColumn: currentGeneratedColumn 
+        };
     }
     setSourceContent(sourcePath, sourceContent) {
+        sourceContent = removeBOM(sourceContent);
         const index = this.addSource(sourcePath);
         if (index !== -1) {
             if (!this.sourcesContent) {
@@ -288,5 +315,8 @@ function parseArgs(args) {
 function matchRuleShort(str, rule) {
     var escapeRegex = (str) => str.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1");
     return new RegExp("^" + rule.split("*").map(escapeRegex).join(".*") + "$").test(str);
-  }
+}
  
+function removeBOM(content) {
+    return content.charCodeAt(0) === 0xFEFF ? content.slice(1) : content;
+}
